@@ -1,9 +1,14 @@
 #' Automatically detect the straightedge in an ultrasound image
 #'
 #' Find and separate a range of contiguous points at the right end of a series of 2D positions
-#' that probably represent the straightedge or other level object used for calibration
+#' that probably represent the straightedge or other level object used for calibration.
 #'
-#' @return A subset of the imaging data belonging to the straightedge
+#' @param data Dataframe including several 2D points of an object on the occlusal plane.
+#' @param column_x The name of the dataframe column containing a data point's position
+#'   along the horizontal axis.
+#' @param column_y The name of the dataframe column containing a data point's position
+#'   along the vertical axis.
+#' @returns A subset of the imaging data belonging to the straightedge.
 #' @export
 
 findstraightedge <- function(data, column_x='X', column_y='Y') {
@@ -35,16 +40,23 @@ findstraightedge <- function(data, column_x='X', column_y='Y') {
 }
 
 
-#' Rotate a single snapshot of the tongue
+#' Rotate a single tongue contour
 #'
-#' Fix the angle of one series of 2D tongue imaging data based on straightedge data points
+#' Fix the angle of one set of 2D tongue contour data based on previously identified
+#' straightedge data points.
 #'
-#' @return The data frame with the rotated position values
+#' @param tongue_data Dataframe containing the input positions of the tongue contour.
+#' @param occlusal_data Dataframe containing positions on or near the occlusal plane.
+#' @param column_x The name of the dataframe column containing a data point's position
+#'   along the horizontal axis.
+#' @param column_y The name of the dataframe column containing a data point's position
+#'   along the vertical axis.
+#' @returns The data frame with the rotated position values.
 #' @export
 
-rottongue <- function(tongue_data, horizontal_data, column_x='X', column_y='Y') {
+rottongue <- function(tongue_data, occlusal_data, column_x='X', column_y='Y') {
   # extract the angle of the straightedge to be cancelled out
-  linear_regression <- summary(lm(Y ~ X, data=horizontal_data))
+  linear_regression <- summary(lm(Y ~ X, data=occlusal_data))
   slope <- linear_regression$coefficients[2,1]
   angle <- atan(slope)
   # translate the whole dataset to be centered around (0, 0)
@@ -68,12 +80,14 @@ rottongue <- function(tongue_data, horizontal_data, column_x='X', column_y='Y') 
 
 #' Make all tongue position data level
 #'
-#' Rotate several instances of tongue imaging data based on a reference image showing the occlusal plane
+#' Rotate several instances of tongue imaging data based on a reference image
+#' showing the occlusal plane.
 #'
 #' @return The data frame with all position values rotated
 #' @export
 
-normtongue <- function(tongue_data, horizontal_data=NULL) {
+normtongue <- function(tongue_data, occlusal_data=NULL) {
+  # TODO
 }
 
 
@@ -83,24 +97,27 @@ library(ggplot2)
 
 spl_data <- read.csv(file='/home/nil/R/spl_vegl.csv', fileEncoding='latin1')
 
-spl_sample <- spl_data[spl_data$spk == 'F03' & spl_data$szó == 'vonalzó' & spl_data$sorrend == 1 & spl_data$confi > 0,]
+spl_sample <- spl_data[spl_data$spk == 'F03' & spl_data$szó == 'vonalzó' & spl_data$sorrend == 1& spl_data$confi > 0,]
 
 ggplot(spl_sample, aes(x=X, y=Y)) + geom_point() + ylim(40, 70) + geom_abline(intercept=intercept, slope=slope)
 
 straightedge <- findstraightedge(spl_sample)
 rotated_sample <- rottongue(spl_sample, straightedge)
 
-ggplot(rotated_sample, aes(x=X, y=Y)) + geom_point() + ylim(40, 70)
+ggplot(rotated_sample, aes(x=X, y=Y)) + geom_point() + ylim(40, 70) + ggplot(spl_sample, aes(x=X, y=Y))
 
-intercept1 <- 107.1155
-slope1     <- -0.3998
-intercept2 <- 90.2273
-slope2     <- -0.2589
+teklanak <- merge(spl_sample, rotated_sample, all=TRUE)
+odd_rows <- seq_len(nrow(teklanak)) %% 2
+teklanak$color <- "red"
+for (i in 1:19) {
+  if (odd_rows[i] == 0) { teklanak$color[i] <- 'red' }
+  if (odd_rows[i] == 1) { teklanak$color[i] <- 'black' }
+}
+teklanak$color[19] <- 'red'
 
-ggplot(spl_sample, aes(x=X, y=Y)) + geom_point() + ylim(40, 70) + geom_abline(intercept=intercept1, slope=slope1) + geom_abline(intercept=intercept2, slope=slope2)
+ggplot(teklanak, aes(x=X, y=Y)) + geom_point(colour=teklanak$color) + ylim(50, 70)
 
-
-spl_sample_tail <- tail(spl_sample, n=3)
+spl_sample_tail <- head(spl_sample, n=5)
 linear_regression <- summary(lm(Y ~ X, data=spl_sample_tail))
 intercept <- linear_regression$coefficients[1,1]
 slope     <- linear_regression$coefficients[2,1]
