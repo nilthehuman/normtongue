@@ -1,0 +1,107 @@
+#' Automatically detect the straightedge in an ultrasound image
+#'
+#' Find and separate a range of contiguous points at the right end of a series of 2D positions
+#' that probably represent the straightedge or other level object used for calibration
+#'
+#' @return A subset of the imaging data belonging to the straightedge
+#' @export
+
+findstraightedge <- function(data, column_x='X', column_y='Y') {
+  data <- data[order(data[,column_x]),]
+  slope_deg_prev <- NULL
+  stderror_prev <- NULL
+  data_tail <- NULL
+  # trust the rightmost two points to always be on the straightedge by default
+  for (num_points in 2:nrow(data)) {
+    data_tail <- tail(data, n=num_points)
+    linear_regression <- summary(lm(data_tail[,column_y] ~ data_tail[,column_x], data=data_tail))
+    slope <- linear_regression$coefficients[2,1]
+    slope_deg <- atan(slope) / pi * 180
+    stderror <- linear_regression$coefficients[2,2]
+    # use reasonable heuristics to detect a sharp "knuckle" in the data
+    MAX_SLOPE_DEVIATION <- 4.0  # degrees
+    if (!is.null(slope_deg_prev) && abs(slope_deg - slope_deg_prev) > MAX_SLOPE_DEVIATION) {
+      break
+    }
+    # N.B. stderror is NaN when you only have two points
+    if (num_points > 3 && !is.null(stderror_prev) && stderror > stderror_prev) {
+      break
+    }
+    slope_deg_prev <- slope_deg
+    stderror_prev <- stderror
+  }
+  # backtrack one point to the state before the break statement
+  tail(data_tail, n=-1)
+}
+
+
+#' Rotate a single snapshot of the tongue
+#'
+#' Fix the angle of one series of 2D tongue imaging data based on straightedge data points
+#'
+#' @return The data frame with the rotated position values
+#' @export
+
+rottongue <- function(tongue_data, horizontal_data, column_x='X', column_y='Y') {
+  # extract the angle of the straightedge to be cancelled out
+  linear_regression <- summary(lm(Y ~ X, data=horizontal_data))
+  slope <- linear_regression$coefficients[2,1]
+  angle <- atan(slope)
+  # translate the whole dataset to be centered around (0, 0)
+  center_x <- mean(tongue_data[[column_x]])
+  center_y <- mean(tongue_data[[column_y]])
+  tongue_data[,column_x] <- tongue_data[,column_x] - center_x
+  tongue_data[,column_y] <- tongue_data[,column_y] - center_y
+  # rotate around origin:
+  # x' = cos(a) * x - sin(a) * y
+  # y' = cos(a) * y + sin(a) * x
+  old_x <- tongue_data[[column_x]]
+  old_y <- tongue_data[[column_y]]
+  tongue_data[,column_x] <- cos(-angle) * old_x - sin(-angle) * old_y
+  tongue_data[,column_y] <- cos(-angle) * old_y + sin(-angle) * old_x
+  # translate back
+  tongue_data[,column_x] <- tongue_data[,column_x] + center_x
+  tongue_data[,column_y] <- tongue_data[,column_y] + center_y
+  tongue_data
+}
+
+
+#' Make all tongue position data level
+#'
+#' Rotate several instances of tongue imaging data based on a reference image showing the occlusal plane
+#'
+#' @return The data frame with all position values rotated
+#' @export
+
+normtongue <- function(tongue_data, horizontal_data=NULL) {
+}
+
+
+# ---- ---- ---- ---- ---- ---- ---- ----
+# Usage example:
+library(ggplot2)
+
+spl_data <- read.csv(file='/home/nil/R/spl_vegl.csv', fileEncoding='latin1')
+
+spl_sample <- spl_data[spl_data$spk == 'F03' & spl_data$szó == 'vonalzó' & spl_data$sorrend == 1 & spl_data$confi > 0,]
+
+ggplot(spl_sample, aes(x=X, y=Y)) + geom_point() + ylim(40, 70) + geom_abline(intercept=intercept, slope=slope)
+
+straightedge <- findstraightedge(spl_sample)
+rotated_sample <- rottongue(spl_sample, straightedge)
+
+ggplot(rotated_sample, aes(x=X, y=Y)) + geom_point() + ylim(40, 70)
+
+intercept1 <- 107.1155
+slope1     <- -0.3998
+intercept2 <- 90.2273
+slope2     <- -0.2589
+
+ggplot(spl_sample, aes(x=X, y=Y)) + geom_point() + ylim(40, 70) + geom_abline(intercept=intercept1, slope=slope1) + geom_abline(intercept=intercept2, slope=slope2)
+
+
+spl_sample_tail <- tail(spl_sample, n=3)
+linear_regression <- summary(lm(Y ~ X, data=spl_sample_tail))
+intercept <- linear_regression$coefficients[1,1]
+slope     <- linear_regression$coefficients[2,1]
+ggplot(spl_sample, aes(x=X, y=Y)) + geom_point() + ylim(40, 70) + geom_abline(intercept=intercept, slope=slope)
