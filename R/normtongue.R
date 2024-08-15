@@ -1,3 +1,21 @@
+#' Filter ultrasound tongue imaging data by confidence
+#'
+#' A convenience function to throw away all data point with zero confidence and
+#' keep the rest. Other functions may call this one as a necessary preprocessing
+#' step before doing their actual job.
+#'
+#' @param data Input dataframe of a set of 2D positions recorded with ultrasound.
+#' @param column_confi The name of the dataframe column containing confidence values.
+#' @param confi_cutoff Data points up to this limit will be excluded (0 by default).
+#' @returns The same dataframe with the zero confidence data filtered out.
+#' @export
+
+filterbyconfidence <- function(data, column_confi='confi', confi_cutoff=0) {
+  filtered_data <- data[data[,column_confi] > confi_cutoff,]
+  filtered_data
+}
+
+
 #' Automatically detect the straightedge in an ultrasound image
 #'
 #' Find and separate a range of contiguous points at the right end of a series of 2D positions
@@ -12,6 +30,7 @@
 #' @export
 
 findstraightedge <- function(data, column_x='X', column_y='Y') {
+  data <- filterbyconfidence(data)
   data <- data[order(data[,column_x]),]
   slope_deg_prev <- NULL
   stderror_prev <- NULL
