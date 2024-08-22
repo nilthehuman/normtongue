@@ -102,11 +102,37 @@ rottongue <- function(tongue_data, occlusal_data, column_x='X', column_y='Y') {
 #' Rotate several instances of tongue imaging data based on a reference image
 #' showing the occlusal plane.
 #'
+#' @param data Dataframe containing the input positions of several tongue contours
+#'   and a straightedge contour for each "batch" of tongue contours.
+#' @param keys Array of column names to uniquely identify a batch of data belonging
+#'   to the same occlusal contour in 'data'.
+#' @param column_word The name of the column in 'data' that contains the target
+#'   word produced by the speaker when the tongue contour was captured.
+#' @param occlusal_word The dummy word in the 'column_word' that identifies
+#'   straightedge data as opposed to regular data.
 #' @return The data frame with all position values rotated
 #' @export
 
-normtongue <- function(tongue_data, occlusal_data=NULL) {
-  # TODO
+normtongue <- function(data, keys, column_word, occlusal_word) {
+  data <- filterbyconfidence(data)
+  occlusal_rows <- data[data[,column_word] == occlusal_word,]
+  occlusal_keys <- occlusal_rows[!duplicated(occlusal_rows[, keys]),]
+  occlusal_keys <- occlusal_keys[keys]
+  data_rotated <- data.frame()
+  for (row in 1:nrow(occlusal_keys)) {
+    print(row)
+    keys_row <- occlusal_keys[row,]
+    # extract straightedge contour
+    occlusal_contour <- merge(data, keys_row)
+    occlusal_contour <- occlusal_contour[occlusal_contour[,column_word] == occlusal_word,]
+    occlusal_plane <- findstraightedge(occlusal_contour)
+    # find all contours belonging to this straightedge contour
+    contours <- merge(data, keys_row)
+    contours <- rottongue(contours, occlusal_plane)
+    # accumulate results in data_rotated
+    data_rotated <- rbind(data_rotated, contours)
+  }
+  data_rotated
 }
 
 
@@ -116,9 +142,15 @@ library(ggplot2)
 
 spl_data <- read.csv(file='/home/nil/R/spl_vegl.csv', fileEncoding='latin1')
 
-spl_sample <- spl_data[spl_data$spk == 'F03' & spl_data$szó == 'vonalzó' & spl_data$sorrend == 1& spl_data$confi > 0,]
+spl_data_rotated <- normtongue(spl_data, c("spk", "sorrend"), "szó", "vonalzó")
 
-ggplot(spl_sample, aes(x=X, y=Y)) + geom_point() + ylim(40, 70) + geom_abline(intercept=intercept, slope=slope)
+spl_sample <- spl_data[spl_data$spk == 'F03' & spl_data$szó == 'serif' & spl_data$sorrend == 1& spl_data$confi > 0,]
+
+spl_sample_rotated <- spl_data_rotated[spl_data_rotated$spk == 'F03' & spl_data_rotated$szó == 'serif' & spl_data_rotated$sorrend == 1& spl_data_rotated$confi > 0,]
+
+ggplot(spl_sample, aes(x=X, y=Y)) + geom_point()
+
+ggplot(spl_sample_rotated, aes(x=X, y=Y)) + geom_point()
 
 straightedge <- findstraightedge(spl_sample)
 rotated_sample <- rottongue(spl_sample, straightedge)
@@ -141,3 +173,9 @@ linear_regression <- summary(lm(Y ~ X, data=spl_sample_tail))
 intercept <- linear_regression$coefficients[1,1]
 slope     <- linear_regression$coefficients[2,1]
 ggplot(spl_sample, aes(x=X, y=Y)) + geom_point() + ylim(40, 70) + geom_abline(intercept=intercept, slope=slope)
+
+
+
+contours <- contours[contours$szó == 'Aliz' & contours$confi > 0,]
+
+ggplot(contours, aes(x=X, y=Y)) + geom_point()
