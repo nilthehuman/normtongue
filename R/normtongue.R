@@ -137,45 +137,63 @@ normtongue <- function(data, keys, column_word, occlusal_word) {
 
 
 # ---- ---- ---- ---- ---- ---- ---- ----
-# Usage example:
-library(ggplot2)
+# Usage examples:
 
-spl_data <- read.csv(file='/home/nil/R/spl_vegl.csv', fileEncoding='latin1')
+data <- read.csv(file='ultrasound_splines.csv')
 
-spl_data_rotated <- normtongue(spl_data, c("spk", "sorrend"), "szó", "vonalzó")
+# Example 1: basic usage of the main function.
 
-spl_sample <- spl_data[spl_data$spk == 'F03' & spl_data$szó == 'serif' & spl_data$sorrend == 1& spl_data$confi > 0,]
+data_rotated <- normtongue(data, c("spk", "batch"), "word", "STRAIGHTEDGE")
 
-spl_sample_rotated <- spl_data_rotated[spl_data_rotated$spk == 'F03' & spl_data_rotated$szó == 'serif' & spl_data_rotated$sorrend == 1& spl_data_rotated$confi > 0,]
+# We can take a look at the results for a specific word and speaker, for example
+contours <- data_rotated[data_rotated$spk == 'N01' & data_rotated$word == 'bricks',]
+ggplot(contours, aes(x=X, y=Y, color=batch)) + geom_point()
 
-ggplot(spl_sample, aes(x=X, y=Y)) + geom_point()
+# We can export the results if we are satisfied
+write.csv(data_rotated, file='output.csv')
 
-ggplot(spl_sample_rotated, aes(x=X, y=Y)) + geom_point()
+# Example 2: some of our data cannot be treated like the rest for some reason,
+# so we decide to use a different straightedge from the dame data frame for it.
 
-straightedge <- findstraightedge(spl_sample)
-rotated_sample <- rottongue(spl_sample, straightedge)
+# The data we want to use a different straightedge for
+which_spk <- "F01"
+which_batch <- "1"
+# The custom straightedge we want to use for the exceptional data
+straightedge_to_use_spk <- "M01"
+straightedge_to_use_batch <- "2"
 
-ggplot(rotated_sample, aes(x=X, y=Y)) + geom_point() + ylim(40, 70) + ggplot(spl_sample, aes(x=X, y=Y))
+# Find and process the data points of the straightedge we want to use
+straightedge <- findstraightedge(data[data$spk == straightedge_to_use_spk & data$batch == straightedge_to_use_batch & data$word == "STRAIGHTEDGE",])
+# Rotate selected exceptional data according to the custom straightedge
+rotated_exceptional <- rottongue(data[data$spk == which_spk & data$batch == which_batch,], straightedge)
 
-teklanak <- merge(spl_sample, rotated_sample, all=TRUE)
-odd_rows <- seq_len(nrow(teklanak)) %% 2
-teklanak$color <- "red"
-for (i in 1:19) {
-  if (odd_rows[i] == 0) { teklanak$color[i] <- 'red' }
-  if (odd_rows[i] == 1) { teklanak$color[i] <- 'black' }
+# Rotate all of the data frame using everyone's own straightedges
+rotated_full <- normtongue(data, c("spk", "batch"), "word", "STRAIGHTEDGE")
+# Swap out the subset that we rotated previously with the custom straightedge
+rotated_full <- subset(rotated_full, spk != which_spk | batch != which_batch)
+rotated_full <- rbind(rotated_full, rotated_exceptional)
+
+# Example 3: it turns out the first straightedge contour is the most accurate
+# for all speakers, so let's only use those straightedges for all rotations.
+
+# For this we define a modified function based on the original normtongue
+# function, adapted to our purpose. We process all data on a per-speaker basis,
+# so instead of a vector of keys, we only use the speakers' identifiers here
+normtongue_only_first <- function(data, column_word, occlusal_word) {
+  data <- filterbyconfidence(data)
+  data_rotated <- data.frame()
+  for (speaker in unique(data$spk)) {
+    print(sprintf("processing the contours of speaker %s...", speaker))
+    # Extract first straightedge contour
+    occlusal_contour <- data[data$spk == speaker & data$batch == 1 & data[,column_word] == occlusal_word,]
+    occlusal_plane <- findstraightedge(occlusal_contour)
+    # Find all contours from this speaker
+    contours <- data[data$spk == speaker,]
+    contours <- rottongue(contours, occlusal_plane)
+    # accumulate results in data_rotated
+    data_rotated <- rbind(data_rotated, contours)
+  }
+  data_rotated
 }
-teklanak$color[19] <- 'red'
 
-ggplot(teklanak, aes(x=X, y=Y)) + geom_point(colour=teklanak$color) + ylim(50, 70)
-
-spl_sample_tail <- head(spl_sample, n=5)
-linear_regression <- summary(lm(Y ~ X, data=spl_sample_tail))
-intercept <- linear_regression$coefficients[1,1]
-slope     <- linear_regression$coefficients[2,1]
-ggplot(spl_sample, aes(x=X, y=Y)) + geom_point() + ylim(40, 70) + geom_abline(intercept=intercept, slope=slope)
-
-
-
-contours <- contours[contours$szó == 'Aliz' & contours$confi > 0,]
-
-ggplot(contours, aes(x=X, y=Y)) + geom_point()
+data_rotated <- normtongue_only_first(data, "word", "STRAIGHTEDGE")
