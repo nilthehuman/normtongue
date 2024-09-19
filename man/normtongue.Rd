@@ -24,8 +24,9 @@ normtongue(dataframe, keys, word_column, straightedge_word)
     to occlusal plane contours.}
 }
 \value{
-  A new dataframe containing all observations (with positive confidence values)
-  rotated according to the corresponding occlusal plane contours.
+  A new dataframe containing all observations (with positive confidence values),
+  including the occlusal plane observations, rotated so as to nullify the angle
+  detected in the corresponding occlusal plane contours.
 }
 \examples{
 # Usage examples:
