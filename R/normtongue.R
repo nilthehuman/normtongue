@@ -110,11 +110,14 @@ rottongue <- function(tongue_data, occlusal_data, x_column='X', y_column='Y') {
 #'   word produced by the speaker when the tongue contour was captured.
 #' @param occlusal_word The dummy word in the 'word_column' that identifies
 #'   straightedge data as opposed to regular data.
+#' @param check_confi Should observations with zero confidence be discarded.
 #' @return The data frame with all position values rotated
 #' @export
 
-normtongue <- function(data, keys, word_column, occlusal_word) {
-  data <- filterbyconfidence(data)
+normtongue <- function(data, keys, word_column, occlusal_word, check_confi=TRUE) {
+  if (check_confi) {
+    data <- filterbyconfidence(data)
+  }
   occlusal_rows <- data[data[,word_column] == occlusal_word,]
   occlusal_keys <- occlusal_rows[!duplicated(occlusal_rows[, keys]),]
   occlusal_keys <- occlusal_keys[keys]
