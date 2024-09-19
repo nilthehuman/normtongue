@@ -120,7 +120,7 @@ normtongue <- function(data, keys, column_word, occlusal_word) {
   occlusal_keys <- occlusal_keys[keys]
   data_rotated <- data.frame()
   for (row in 1:nrow(occlusal_keys)) {
-    print(row)
+    print(sprintf("processing batch #%d out of %d total", row, nrow(occlusal_keys)))
     keys_row <- occlusal_keys[row,]
     # extract straightedge contour
     occlusal_contour <- merge(data, keys_row)
