@@ -5,13 +5,13 @@
 #' step before doing their actual job.
 #'
 #' @param data Input dataframe of a set of 2D positions recorded with ultrasound.
-#' @param column_confi The name of the dataframe column containing confidence values.
+#' @param confi_column The name of the dataframe column containing confidence values.
 #' @param confi_cutoff Data points up to this limit will be excluded (0 by default).
 #' @returns The same dataframe with the zero confidence data filtered out.
 #' @export
 
-filterbyconfidence <- function(data, column_confi='confi', confi_cutoff=0) {
-  filtered_data <- data[data[,column_confi] > confi_cutoff,]
+filterbyconfidence <- function(data, confi_column='confi', confi_cutoff=0) {
+  filtered_data <- data[data[,confi_column] > confi_cutoff,]
   filtered_data
 }
 
@@ -22,37 +22,37 @@ filterbyconfidence <- function(data, column_confi='confi', confi_cutoff=0) {
 #' that probably represent the straightedge or other level object used for calibration.
 #'
 #' @param data Dataframe including several 2D points of an object on the occlusal plane.
-#' @param column_x The name of the dataframe column containing a data point's position
+#' @param x_column The name of the dataframe column containing a data point's position
 #'   along the horizontal axis.
-#' @param column_y The name of the dataframe column containing a data point's position
+#' @param y_column The name of the dataframe column containing a data point's position
 #'   along the vertical axis.
 #' @returns A subset of the imaging data belonging to the straightedge.
 #' @export
 
-findstraightedge <- function(data, column_x='X', column_y='Y') {
+findstraightedge <- function(data, x_column='X', y_column='Y') {
   data <- filterbyconfidence(data)
-  data <- data[order(data[,column_x]),]
-  slope_deg_prev <- NULL
-  stderror_prev <- NULL
+  data <- data[order(data[,x_column]),]
+  prev_slope_deg <- NULL
+  prev_stderror <- NULL
   data_tail <- NULL
   # trust the rightmost two points to always be on the straightedge by default
   for (num_points in 2:nrow(data)) {
     data_tail <- tail(data, n=num_points)
-    linear_regression <- summary(lm(data_tail[,column_y] ~ data_tail[,column_x], data=data_tail))
+    linear_regression <- summary(lm(data_tail[,y_column] ~ data_tail[,x_column], data=data_tail))
     slope <- linear_regression$coefficients[2,1]
     slope_deg <- atan(slope) / pi * 180
     stderror <- linear_regression$coefficients[2,2]
     # use reasonable heuristics to detect a sharp "knuckle" in the data
     MAX_SLOPE_DEVIATION <- 4.0  # degrees
-    if (!is.null(slope_deg_prev) && abs(slope_deg - slope_deg_prev) > MAX_SLOPE_DEVIATION) {
+    if (!is.null(prev_slope_deg) && abs(slope_deg - prev_slope_deg) > MAX_SLOPE_DEVIATION) {
       break
     }
     # N.B. stderror is NaN when you only have two points
-    if (num_points > 3 && !is.null(stderror_prev) && stderror > stderror_prev) {
+    if (num_points > 3 && !is.null(prev_stderror) && stderror > prev_stderror) {
       break
     }
-    slope_deg_prev <- slope_deg
-    stderror_prev <- stderror
+    prev_slope_deg <- slope_deg
+    prev_stderror <- stderror
   }
   # backtrack one point to the state before the break statement
   tail(data_tail, n=-1)
@@ -66,33 +66,33 @@ findstraightedge <- function(data, column_x='X', column_y='Y') {
 #'
 #' @param tongue_data Dataframe containing the input positions of the tongue contour.
 #' @param occlusal_data Dataframe containing positions on or near the occlusal plane.
-#' @param column_x The name of the dataframe column containing a data point's position
+#' @param x_column The name of the dataframe column containing a data point's position
 #'   along the horizontal axis.
-#' @param column_y The name of the dataframe column containing a data point's position
+#' @param y_column The name of the dataframe column containing a data point's position
 #'   along the vertical axis.
 #' @returns The data frame with the rotated position values.
 #' @export
 
-rottongue <- function(tongue_data, occlusal_data, column_x='X', column_y='Y') {
+rottongue <- function(tongue_data, occlusal_data, x_column='X', y_column='Y') {
   # extract the angle of the straightedge to be cancelled out
   linear_regression <- summary(lm(Y ~ X, data=occlusal_data))
   slope <- linear_regression$coefficients[2,1]
   angle <- atan(slope)
   # translate the whole dataset to be centered around (0, 0)
-  center_x <- mean(tongue_data[[column_x]])
-  center_y <- mean(tongue_data[[column_y]])
-  tongue_data[,column_x] <- tongue_data[,column_x] - center_x
-  tongue_data[,column_y] <- tongue_data[,column_y] - center_y
+  center_x <- mean(tongue_data[[x_column]])
+  center_y <- mean(tongue_data[[y_column]])
+  tongue_data[,x_column] <- tongue_data[,x_column] - center_x
+  tongue_data[,y_column] <- tongue_data[,y_column] - center_y
   # rotate around origin:
   # x' = cos(a) * x - sin(a) * y
   # y' = cos(a) * y + sin(a) * x
-  old_x <- tongue_data[[column_x]]
-  old_y <- tongue_data[[column_y]]
-  tongue_data[,column_x] <- cos(-angle) * old_x - sin(-angle) * old_y
-  tongue_data[,column_y] <- cos(-angle) * old_y + sin(-angle) * old_x
+  old_x <- tongue_data[[x_column]]
+  old_y <- tongue_data[[y_column]]
+  tongue_data[,x_column] <- cos(-angle) * old_x - sin(-angle) * old_y
+  tongue_data[,y_column] <- cos(-angle) * old_y + sin(-angle) * old_x
   # translate back
-  tongue_data[,column_x] <- tongue_data[,column_x] + center_x
-  tongue_data[,column_y] <- tongue_data[,column_y] + center_y
+  tongue_data[,x_column] <- tongue_data[,x_column] + center_x
+  tongue_data[,y_column] <- tongue_data[,y_column] + center_y
   tongue_data
 }
 
@@ -106,16 +106,16 @@ rottongue <- function(tongue_data, occlusal_data, column_x='X', column_y='Y') {
 #'   and a straightedge contour for each "batch" of tongue contours.
 #' @param keys Array of column names to uniquely identify a batch of data belonging
 #'   to the same occlusal contour in 'data'.
-#' @param column_word The name of the column in 'data' that contains the target
+#' @param word_column The name of the column in 'data' that contains the target
 #'   word produced by the speaker when the tongue contour was captured.
-#' @param occlusal_word The dummy word in the 'column_word' that identifies
+#' @param occlusal_word The dummy word in the 'word_column' that identifies
 #'   straightedge data as opposed to regular data.
 #' @return The data frame with all position values rotated
 #' @export
 
-normtongue <- function(data, keys, column_word, occlusal_word) {
+normtongue <- function(data, keys, word_column, occlusal_word) {
   data <- filterbyconfidence(data)
-  occlusal_rows <- data[data[,column_word] == occlusal_word,]
+  occlusal_rows <- data[data[,word_column] == occlusal_word,]
   occlusal_keys <- occlusal_rows[!duplicated(occlusal_rows[, keys]),]
   occlusal_keys <- occlusal_keys[keys]
   data_rotated <- data.frame()
@@ -124,7 +124,7 @@ normtongue <- function(data, keys, column_word, occlusal_word) {
     keys_row <- occlusal_keys[row,]
     # extract straightedge contour
     occlusal_contour <- merge(data, keys_row)
-    occlusal_contour <- occlusal_contour[occlusal_contour[,column_word] == occlusal_word,]
+    occlusal_contour <- occlusal_contour[occlusal_contour[,word_column] == occlusal_word,]
     occlusal_plane <- findstraightedge(occlusal_contour)
     # find all contours belonging to this straightedge contour
     contours <- merge(data, keys_row)
